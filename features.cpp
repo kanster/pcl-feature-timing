@@ -27,6 +27,8 @@
 #include <pcl/features/shot.h>
 #include <pcl/features/3dsc.h>
 #include <pcl/features/rift.h>
+#include <pcl/features/intensity_gradient.h>
+#include <pcl/point_types_conversion.h>
 
 
 #include <pcl/point_cloud.h>
@@ -420,6 +422,85 @@ pcl::PointCloud<pcl::PrincipalRadiiRSD>::Ptr rsd_extraction(
   return descrs;
 }
 
+/// 3D Shape Context
+///
+/// cloud         -- input point cloud
+/// kpts          -- keypoints
+/// normals       -- normals
+///
+pcl::PointCloud<pcl::ShapeContext1980>::Ptr sc_extraction(
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud,
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr kpts,
+    pcl::PointCloud<pcl::Normal>::Ptr normals ) {
+
+  pcl::console::TicToc tt;
+  tt.tic();
+
+  pcl::ShapeContext3DEstimation< pcl::PointXYZRGB, pcl::Normal, pcl::ShapeContext1980 > sc_extraction;
+  sc_extraction.setInputCloud( kpts );
+  sc_extraction.setSearchSurface(cloud);
+  sc_extraction.setInputNormals( normals );
+
+  sc_extraction.setRadiusSearch( 0.05 );
+  sc_extraction.setMinimalRadius(0.05 / 10.0);
+  sc_extraction.setPointDensityRadius(0.05 / 5.0);
+
+  pcl::PointCloud<pcl::ShapeContext1980>::Ptr descrs( new pcl::PointCloud<pcl::ShapeContext1980>() );
+  sc_extraction.compute( *descrs );
+  double t = tt.toc();
+  pcl::console::print_value( "3D Shape Context takes %.3f\n", t );
+
+  return descrs;
+
+}
+
+
+/// Rotation-Invariant Feature Transform
+///
+/// cloud         -- input point cloud
+/// kpts          -- keypoints
+/// normals       -- normals
+///
+typedef pcl::Histogram<32> RIFT32;
+pcl::PointCloud<RIFT32 >::Ptr rift_extraction( pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud, pcl::PointCloud<pcl::PointXYZRGB>::Ptr kpts, pcl::PointCloud<pcl::Normal>::Ptr normals ) {
+
+  pcl::console::TicToc tt;
+  tt.tic();
+
+  // Convert the RGB to intensity.
+  pcl::PointCloud<pcl::PointXYZI>::Ptr intensity_cloud(new pcl::PointCloud<pcl::PointXYZI>());
+  pcl::PointCloudXYZRGBtoXYZI(*cloud, *intensity_cloud);
+  pcl::PointCloud<pcl::PointXYZI>::Ptr intensity_kpts(new pcl::PointCloud<pcl::PointXYZI>());
+  pcl::PointCloudXYZRGBtoXYZI(*kpts, *intensity_kpts);
+
+  // Compute the intensity gradients.
+  pcl::PointCloud<pcl::IntensityGradient>::Ptr gradients(new pcl::PointCloud<pcl::IntensityGradient>);
+  pcl::IntensityGradientEstimation< pcl::PointXYZI, pcl::Normal, pcl::IntensityGradient,
+      pcl::common::IntensityFieldAccessor<pcl::PointXYZI> > ge;
+  ge.setInputCloud( intensity_kpts );
+  ge.setSearchSurface( intensity_cloud );
+  ge.setInputNormals(normals);
+  ge.setRadiusSearch(0.05);
+  ge.compute(*gradients);
+  pcl::console::print_value( "gradients = %d, keypoints = %d\n", (int)gradients->size(), (int)intensity_kpts->size() );
+
+  pcl::RIFTEstimation<pcl::PointXYZI, pcl::IntensityGradient, RIFT32 > rift_extraction;
+  rift_extraction.setInputCloud(intensity_kpts);
+//  rift_extraction.setSearchSurface( intensity_cloud );
+  rift_extraction.setInputGradient(gradients);
+  rift_extraction.setRadiusSearch(0.05);
+  rift_extraction.setNrDistanceBins(4);
+  rift_extraction.setNrGradientBins(8);
+
+
+  pcl::PointCloud<RIFT32 >::Ptr descrs( new pcl::PointCloud<RIFT32 >() );
+  rift_extraction.compute( *descrs );
+  double t = tt.toc();
+  pcl::console::print_value( "Rotation-Invariant Feature Transform takes %.3f\n", t );
+
+  return descrs;
+
+}
 
 int main( int argc, char ** argv ) {
   pcl::console::setVerbosityLevel( pcl::console::L_ERROR );
@@ -475,6 +556,12 @@ int main( int argc, char ** argv ) {
   // normal extraction using integral image
   pcl::PointCloud<pcl::Normal>::Ptr normals( new pcl::PointCloud<pcl::Normal>() );
   normals = normal_extraction_integral_image( cloud );
+
+  // RIFT feature
+  rift_extraction( cloud, keypoints, normals );
+
+  // 3DSC feature
+  sc_extraction( cloud, keypoints, normals );
 
   // RSD feature
   rsd_extraction( cloud, keypoints, normals );
