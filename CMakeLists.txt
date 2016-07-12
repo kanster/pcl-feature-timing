@@ -20,7 +20,7 @@ if(OpenCV_FOUND)
 endif()
 
 add_executable(features_comparison features.cpp)
-target_link_libraries(features_comparison ${OpenCV_LIBRARIES} ${PCL_LIBRARIES})
+target_link_libraries(features_comparison ${OpenCV_LIBRARIES} ${PCL_LIBRARIES} ${CMAKE_SOURCE_DIR}/libs/libbrand.a )
 
 add_executable(keypoints_comparison keypoints.cpp)
 target_link_libraries(keypoints_comparison ${OpenCV_LIBRARIES} ${PCL_LIBRARIES})

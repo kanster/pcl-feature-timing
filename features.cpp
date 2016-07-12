@@ -25,12 +25,15 @@
 #include <pcl/features/rift.h>
 #include <pcl/features/intensity_gradient.h>
 #include <pcl/point_types_conversion.h>
+#include <pcl/kdtree/kdtree_flann.h>
 
 
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/visualization/pcl_visualizer.h>
 #include <pcl/filters/uniform_sampling.h>
+
+#include "brand/include/brand.h"
 
 #include <iostream>
 #include <string>
@@ -498,6 +501,70 @@ pcl::PointCloud<RIFT32 >::Ptr rift_extraction( pcl::PointCloud<pcl::PointXYZRGB>
 
 }
 
+/// Binary Robust Appearance and Normals Descriptor
+///
+/// rgbimg        -- rgb image
+/// dimg          -- depth image
+/// cloud         -- point cloud
+/// normals       -- normals
+/// kpts          -- keypoints in 3D
+///
+cv::Mat brand_extraction( cv::Mat rgbimg, cv::Mat dimg, pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud,
+                          pcl::PointCloud<pcl::Normal>::Ptr normals,
+                          pcl::PointCloud<pcl::PointXYZRGB>::Ptr kpts) {
+  // point cloud datatype conversion
+  cv::Mat cloudmat( cloud->height, cloud->width, CV_32FC3 );
+  for ( int i = 0; i < cloud->height; ++ i ) {
+    cv::Point3f * pt_ptr = (cv::Point3f*)cloudmat.ptr(i);
+    for ( int j = 0; j < cloud->width; ++ j ) {
+      pcl::PointXYZRGB & pt = cloud->points[ i*cloud->width+j ];
+      pt_ptr[j].x = pt.x;
+      pt_ptr[j].y = pt.y;
+      pt_ptr[j].z = pt.z;
+    }
+  }
+
+  // normal datatype conversion
+  cv::Mat normalsmat( cloud->height, cloud->width, CV_32FC3 );
+  for( int y = 0; y < normals->height; ++y) {
+    for( int x = 0; x < normals->width; ++x) {
+      normalsmat.at<cv::Point3f>(y,x).x = normals->at(x,y).normal_x;
+      normalsmat.at<cv::Point3f>(y,x).y = normals->at(x,y).normal_y;
+      normalsmat.at<cv::Point3f>(y,x).z = normals->at(x,y).normal_z;
+    }
+  }
+
+  // find keypoints in 2d image space using kdtree, flann
+  std::vector< cv::KeyPoint > kpts2d;
+  pcl::KdTreeFLANN<pcl::PointXYZRGB> kdtree;
+  kdtree.setInputCloud( cloud );
+  int K = 1;
+  std::vector<int> point_idxs(K);
+  std::vector<float> point_dists(K);
+  for ( size_t i = 0; i < kpts->size(); ++ i ) {
+    pcl::PointXYZRGB & pt = kpts->points[i];
+    if ( kdtree.nearestKSearch( pt, K, point_idxs, point_dists ) > 0 ) {
+      cv::KeyPoint kpt2d;
+      kpt2d.pt.x = point_idxs[0]%cloud->width;
+      kpt2d.pt.y = (int)point_idxs[0]/cloud->width;
+      kpts2d.push_back( kpt2d );
+    }
+  }
+
+  pcl::console::TicToc tt;
+  tt.tic();
+  cv::Mat descrs;
+  BrandDescriptorExtractor brand;
+  brand.compute( rgbimg, cloudmat, normalsmat, kpts2d, descrs );
+  double t = tt.toc();
+  pcl::console::print_value( "Binary Robust Appearance and Normals Descriptor takes %.3f for %d keypoints\n", t, (int)kpts2d.size() );
+
+  return descrs;
+
+
+}
+
+
 int main( int argc, char ** argv ) {
   pcl::console::setVerbosityLevel( pcl::console::L_ERROR );
 
@@ -552,6 +619,9 @@ int main( int argc, char ** argv ) {
   // normal extraction using integral image
   pcl::PointCloud<pcl::Normal>::Ptr normals( new pcl::PointCloud<pcl::Normal>() );
   normals = normal_extraction_integral_image( cloud );
+
+  // BRAND feature
+  brand_extraction( rgbimg, depthimg, cloud, normals, keypoints );
 
   // RIFT feature
   rift_extraction( cloud, keypoints, normals );
