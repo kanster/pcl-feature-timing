@@ -1,10 +1,6 @@
 /**
  * time consumption comparsion analysis for 3D features in Point Cloud Library
  * use uniform sampling as keypoint detector
- * @methods
- *    - normal 3d
- *    - normal 3d omp
- *    -
  * @author Kanzhi Wu
  */
 
@@ -43,14 +39,14 @@
 /// print command usage
 /// argv        -- input arguments
 void print_usage( char * argv ) {
-  pcl::console::print_error( "Syntax is: %s rgb_image depth_image <options>\n", argv );
-  std::cout << "Options:\n" <<
-               "    -all          use all features\n" <<
-               "    -normal       normal feature\n" <<
-               "    -normalomp    normal feature in OMP mode\n" <<
-               "    -normalii     normal feature using intergral image\n" <<
-               "    -help         print usage\n";
-  std::cout << "\n\n";
+  pcl::console::print_error( "Syntax is: %s rgb_image depth_image\n", argv );
+//  std::cout << "Options:\n" <<
+//               "    -all          use all features\n" <<
+//               "    -normal       normal feature\n" <<
+//               "    -normalomp    normal feature in OMP mode\n" <<
+//               "    -normalii     normal feature using intergral image\n" <<
+//               "    -help         print usage\n";
+//  std::cout << "\n\n";
 }
 
 
