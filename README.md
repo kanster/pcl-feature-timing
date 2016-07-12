@@ -18,6 +18,7 @@ Results:
 - Normal extraction takes 485.000
 - Normal extraction in OMP takes 196.000
 - Normal extraction using integral image(307200 points) takes 45.000
+- Binary Robust Appearance and Normals Descriptor takes 549.000 for 1937 keypoints
 - Rotation-Invariant Feature Transform takes 127.000
 - 3D Shape Context takes 3572.000
 - Radius-Based Surface Descriptor takes 167.000
